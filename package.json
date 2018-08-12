@@ -1,0 +1,25 @@
+{
+  "name": "redux-webextension",
+  "version": "1.0.0",
+  "description": "Connect to a Redux store in a WebExtension background page",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heavyset/redux-webextension.git"
+  },
+  "keywords": [
+    "redux",
+    "webextension",
+    "chrome",
+    "firefox"
+  ],
+  "author": "Gabriel Gironda <gabriel@gironda.org> (https://www.gironda.org)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/heavyset/redux-webextension/issues"
+  },
+  "homepage": "https://github.com/heavyset/redux-webextension#readme"
+}
