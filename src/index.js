@@ -27,7 +27,7 @@ function defaultPortFactory(name) {
  * @param {string} name - A name that identifies the connecting component,
  *     useful for debugging.
  *
- * @returns {object} An object confirming to the Redux store API that can be
+ * @returns {object} An object conforming to the Redux store API that can be
  *    used transparently with code expecting a Redux store object, such as
  *    the React redux bindings.
  *
