@@ -108,13 +108,27 @@ function defaultConnectListener(callback: ConnectListener) {
  *
  * @param {object} store - The Redux store to expose.
  * @param {Function} addConnectListener - A function that will repeatedly call
- *     a given callback with a newly connected port.
+ *     a given callback with a newly connected port. If not supplied, an
+ *     appropriate default is used.
+ * @param {Function} disconnectCallback - A function that will be called when
+ *     the port disconnects with the disconnected port and the store. This is
+ *     useful for doing state cleanup if necessary.
  */
 function exposeStore(
   store: Store<any, any>,
-  addConnectListener: ConnectListener => void = defaultConnectListener
+  addConnectListener: ConnectListener => void,
+  disconnectCallback: (
+    WebExtension$Runtime$Port<ReduxMessage>,
+    Store<any, any>
+  ) => void
 ) {
-  addConnectListener(registerPortListeners.bind(null, store));
+  if (!addConnectListener) {
+    addConnectListener = defaultConnectListener;
+  }
+
+  addConnectListener(port => {
+    registerPortListeners(store, port, disconnectCallback);
+  });
 }
 
 /**
@@ -122,10 +136,17 @@ function exposeStore(
  *
  * @param {object} store - The Redux store to expose.
  * @param {object} port - The port that will generate events.
+ * @param {Function} disconnectCallback - A function that will be called when
+ *     the port disconnects with the disconnected port and the store. This is
+ *     useful for doing state cleanup if necessary.
  */
 function registerPortListeners(
   store: Store<any, any>,
-  port: WebExtension$Runtime$Port<ReduxMessage>
+  port: WebExtension$Runtime$Port<ReduxMessage>,
+  disconnectCallback: (
+    WebExtension$Runtime$Port<ReduxMessage>,
+    Store<any, any>
+  ) => void
 ) {
   function sendStateSync() {
     port.postMessage({
@@ -147,10 +168,17 @@ function registerPortListeners(
     }
   }
 
+  function handleDisconnect(disconnectedPort) {
+    unsubscribe();
+    if (disconnectCallback) {
+      disconnectCallback(disconnectedPort, store);
+    }
+  }
+
   let unsubscribe = store.subscribe(sendStateSync);
 
   port.onMessage.addListener(messageListener);
-  port.onDisconnect.addListener(unsubscribe);
+  port.onDisconnect.addListener(handleDisconnect);
 }
 
 export { connectStore, exposeStore };

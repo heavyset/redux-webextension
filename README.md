@@ -35,6 +35,23 @@ connectStore().then(function(store) {
 });
 ```
 
+### Disconnect Handling
+
+`exposeStore` can be passed a third argument, a callback which is fired when the port disconnects. This can be used to perform any necessary state cleanup. e.g.
+
+```javascript
+import { createStore } from "redux";
+import { exposeStore } from "redux-webextension";
+import { reducer } from "./yourReducers.js";
+
+function cleanupState(port, store) {
+    store.dispatch({ action: "CLEANUP_STATE", port_name: port.name });
+}
+
+const store = createStore(reducer);
+exposeStore(store, null, cleanupState);
+```
+
 ## Example
 
 See the example extension in the `example` directory. To run it, ensure you have Firefox Developer edition installed, and then:
