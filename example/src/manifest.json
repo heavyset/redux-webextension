@@ -1,0 +1,19 @@
+{
+    "name": "redux-webextension-example",
+    "version": "0.0.1",
+    "description": "Example extension showing redux-webextension usage",
+    "background": {
+        "page": "background.html"
+    },
+    "browser_action": {
+        "default_popup": "popup.html"
+    },
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["contentscript.bundle.js"]
+        }
+    ],
+    "web_accessible_resources": ["example.html"],
+    "manifest_version": 2
+}

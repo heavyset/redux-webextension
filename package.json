@@ -2,24 +2,28 @@
   "name": "redux-webextension",
   "version": "1.0.0",
   "description": "Connect to a Redux store in a WebExtension background page",
-  "main": "index.js",
+  "main": "lib/index.js",
   "scripts": {
-    "test": "jest"
+    "test": "npm run build && npx mocha --require babel-core/register",
+    "build": "npx babel src/ -d lib/"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/heavyset/redux-webextension.git"
   },
-  "keywords": [
-    "redux",
-    "webextension",
-    "chrome",
-    "firefox"
-  ],
-  "author": "Gabriel Gironda <gabriel@gironda.org> (https://www.gironda.org)",
+  "keywords": ["redux", "webextension", "chrome", "firefox"],
+  "author": "Gabriel Gironda <gabriel@heavyset.io> (https://www.heavyset.io)",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/heavyset/redux-webextension/issues"
   },
-  "homepage": "https://github.com/heavyset/redux-webextension#readme"
+  "homepage": "https://github.com/heavyset/redux-webextension#readme",
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-plugin-transform-es2015-modules-commonjs": "^6.26.2",
+    "babel-preset-flow": "^6.23.0",
+    "flow-bin": "^0.78.0",
+    "mocha": "^5.2.0",
+    "sinon": "^6.1.5"
+  }
 }
