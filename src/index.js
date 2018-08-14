@@ -52,7 +52,7 @@ function connectStore(
       undefined,
       connectedStore(name, portFactory)
     );
-    store.connected.then(store => resolve(store));
+    store.connected.then(() => resolve(store));
   });
 }
 
@@ -79,7 +79,7 @@ function connectStore(
  *       store's preloaded state instead.
  *     * The returned store slightly non-conforms with the Redux API in that it
  *       adds an extra property, `connected`. This is a `Promise` that resolves
- *       to the store once the state has received a first sync. The `dispatch`/
+ *       to once the state has received a first sync. The `dispatch`/
  *       `subscribe`/`getState` functions will fail until this resolve has
  *       happened.
  */
@@ -117,7 +117,7 @@ function connectedStore(
       let unsubscribe = store.subscribe(() => {
         unsubscribe();
         resolved = true;
-        resolve(newStore);
+        resolve();
       });
 
       port.onMessage.addListener(message => {
