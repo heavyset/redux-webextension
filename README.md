@@ -21,12 +21,14 @@ const store = createStore(reducer);
 exposeStore(store);
 ```
 
-From your content scripts, extension popups, etc., call `connectStore` to return a `Promise` that resolves to an object conforming to the Redux API that can be used directly or with bindings such as `react-redux`:
+From your content scripts, extension popups, etc., call `connectStore` to return a function that matches the Redux `createStore` API. The return value of this function differs slightly in that rather than returning a Store directly, it returns a `Promise` that resolves to an object conforming to the Redux Store API that can be used directly or with bindings such as `react-redux`:
 
 ```javascript
 import { connectStore } from "redux-webextension";
 
-connectStore().then(function(store) {
+let createStore = connectStore();
+
+createStore().then(function(store) {
     store.subscribe(() => {
         console.log("New state:", store.getState());
     });

@@ -3,9 +3,17 @@
  * Exposes a Redux store in a background page of a WebExtension to other
  * extension pages, such as content scripts and popups.
  */
-
+import { createStore, compose } from "redux";
 import type { Store } from "redux";
 
+const randomString = () =>
+  Math.random()
+    .toString(36)
+    .substring(7)
+    .split("")
+    .join(".");
+
+const SYNC_ACTION = `@@redux-webextension/SYNC${randomString()}`;
 const STORE_CLIENT_PREFIX = "storeClient:";
 
 type ReduxMessage = {|
@@ -26,67 +34,115 @@ function defaultPortFactory(name) {
  *
  * @param {string} name - A name that identifies the connecting component,
  *     useful for debugging.
+ * @param {PortFactory<ReduxMessage} portFactory - A function that takes a
+ *     callback which will be invoked with a new browser.runtime port. The
+ *     default value here will suffice in almost all cases.
  *
- * @returns {object} An object conforming to the Redux store API that can be
- *    used transparently with code expecting a Redux store object, such as
- *    the React redux bindings.
- *
- * @todo Make this promise/callback based so we can ensure code only runs once
- *     a valid connection is established to a background page.
+ * @returns {Promise} A promise resolving to an object conforming to the Redux
+ *    store API that can be used transparently with code expecting a Redux
+ *    store object, such as the React redux bindings.
  */
 function connectStore(
   name: string = "default",
   portFactory?: PortFactory<ReduxMessage> = defaultPortFactory
-): Promise<Store<any, any>> {
-  let currentState, port;
-  let subscribers = new Map();
-  let subscriberCounter = 0;
-
-  function subscribe(listener) {
-    let key = subscriberCounter;
-    subscribers.set(key, listener);
-    subscriberCounter++;
-
-    return () => {
-      subscribers.delete(key);
-    };
-  }
-
-  function dispatch(action) {
-    port.postMessage({ type: "dispatch", payload: action });
-  }
-
-  function getState() {
-    return currentState;
-  }
-
-  function replaceReducer() {
-    throw new Error("replaceReducer doesn't exist in remote stores");
-  }
-
-  port = portFactory(name);
-
-  port.onMessage.addListener(message => {
-    switch (message.type) {
-      case "stateSync":
-        currentState = message.payload;
-        subscribers.forEach(s => s());
-        break;
-      default:
-        throw new Error(`Unknown message type: ${message.type}`);
-    }
+) {
+  return new Promise((resolve, reject) => {
+    let store: any = createStore(
+      s => s,
+      undefined,
+      connectedStore(name, portFactory)
+    );
+    store.connected.then(store => resolve(store));
   });
+}
 
-  function executor(resolve, reject) {
-    let unsubscribe = subscribe(() => {
-      unsubscribe();
-      resolve({ subscribe, dispatch, getState, replaceReducer });
-    });
+/**
+ * A Redux store enhancer that connects to a Redux store in a background page
+ * and listens for state updates, then updates the enhanced store to match.
+ *
+ * @param {string} [name] - A name that identifies the connecting component,
+ *     useful for debugging.
+ * @param {PortFactory<ReduxMessage} [portFactory] - A function that takes a
+ *     callback which will be invoked with a new browser.runtime port. The
+ *     default value here will suffice in almost all cases.
+ *
+ * @returns {Function} A Redux store enhancer that conforms to the Redux API,
+ *     with the following caveats:
+ *
+ *     * The reducer passed in to createStore should only be used to narrow the
+ *       state if necessary, e.g. a content script only keeping in sync a
+ *       smaller part of a large state tree. The reducer will only be called if
+ *       the store receives a state tree sync, not for other actions. You
+ *       probably only need an identity (`(i) => i`) function as a reducer, for
+ *       most purposes.
+ *     * The `preloadedState` argument is ignored. Rely on the connected
+ *       store's preloaded state instead.
+ *     * The returned store slightly non-conforms with the Redux API in that it
+ *       adds an extra property, `connected`. This is a `Promise` that resolves
+ *       to the store once the state has received a first sync. The `dispatch`/
+ *       `subscribe`/`getState` functions will fail until this resolve has
+ *       happened.
+ */
+function connectedStore(
+  name: string = "default",
+  portFactory?: PortFactory<ReduxMessage> = defaultPortFactory
+) {
+  return (cs: Function) => (reducer: Function, preloadedState: any) => {
+    let wrappedReducer = (state: any, action) => {
+      return action.type == SYNC_ACTION ? reducer(action.state) : state;
+    };
 
-    port.postMessage({ type: "requestStateSync" });
-  }
+    let store = cs(wrappedReducer, undefined);
+    let port = portFactory(name);
 
-  return new Promise(executor);
+    let resolved = false;
+    let guardResolve = () => {
+      if (!resolved) {
+        throw new Error("Store not yet ready");
+      }
+      return true;
+    };
+
+    let dispatch = (action: any) => {
+      guardResolve() && port.postMessage({ type: "dispatch", payload: action });
+    };
+    let getState = () => guardResolve() && store.getState();
+    let subscribe = (...args: any) =>
+      guardResolve() && store.subscribe(...args);
+    let replaceReducer = () => {
+      throw new Error("replaceReducer doesn't exist in connected stores");
+    };
+
+    function executor(resolve, reject) {
+      let unsubscribe = store.subscribe(() => {
+        unsubscribe();
+        resolved = true;
+        resolve(newStore);
+      });
+
+      port.onMessage.addListener(message => {
+        switch (message.type) {
+          case "stateSync":
+            store.dispatch({ type: SYNC_ACTION, state: message.payload });
+            break;
+          default:
+            throw new Error(`Unknown message type: ${message.type}`);
+        }
+      });
+
+      port.postMessage({ type: "requestStateSync" });
+    }
+
+    let newStore = {
+      connected: new Promise(executor),
+      dispatch,
+      getState,
+      subscribe,
+      replaceReducer
+    };
+
+    return newStore;
+  };
 }
 
 type ConnectListener = (WebExtension$Runtime$Port<ReduxMessage>) => void;
@@ -181,4 +237,4 @@ function registerPortListeners(
   port.onDisconnect.addListener(handleDisconnect);
 }
 
-export { connectStore, exposeStore };
+export { connectStore, connectedStore, exposeStore };

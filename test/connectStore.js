@@ -1,9 +1,12 @@
 import assert from "assert";
 import sinon from "sinon";
 
-import { connectStore } from "../lib/index";
+import { connectStore, connectedStore } from "../lib/index";
+import { createStore, applyMiddleware } from "redux";
 
-describe("connectStore()", () => {
+const identity = s => s;
+
+describe("connectedStore()", () => {
   let portStub;
 
   beforeEach(() => {
@@ -15,13 +18,13 @@ describe("connectStore()", () => {
 
   it("calls the port factory with a given port name", function() {
     let pf = sinon.fake.returns(portStub);
-    connectStore("foo", pf);
+    createStore(identity, connectedStore("foo", pf));
 
     assert.strictEqual(pf.lastArg, "foo");
   });
 
   it("posts an initial state sync request to the port on connect", function() {
-    connectStore("foo", sinon.fake.returns(portStub));
+    createStore(identity, connectStore("foo", sinon.fake.returns(portStub)));
 
     assert.deepStrictEqual(portStub.postMessage.lastArg, {
       type: "requestStateSync"
@@ -31,15 +34,41 @@ describe("connectStore()", () => {
   it("resolves on first state sync", async function() {
     let testState = { bar: "baz" };
 
-    let promisedStore = connectStore("foo", sinon.fake.returns(portStub));
+    let store = createStore(
+      identity,
+      connectedStore("foo", sinon.fake.returns(portStub))
+    );
     portStub.onMessage.addListener.callback({
       type: "stateSync",
       payload: testState
     });
 
-    let store = await promisedStore;
+    await store.connected;
 
     assert.deepStrictEqual(store.getState(), testState);
+  });
+
+  it("allows a reducer to narrow the local state", async function() {
+    let testState = { bar: "baz", a: "b" };
+    let expectedState = { bar: "baz" };
+
+    let reducer = (state, action) => {
+      let { a: _, ...rest } = state;
+      return rest;
+    };
+
+    let store = createStore(
+      reducer,
+      connectedStore("foo", sinon.fake.returns(portStub))
+    );
+    portStub.onMessage.addListener.callback({
+      type: "stateSync",
+      payload: testState
+    });
+
+    await store.connected;
+
+    assert.deepStrictEqual(store.getState(), expectedState);
   });
 });
 
