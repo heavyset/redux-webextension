@@ -3,9 +3,17 @@
  * Exposes a Redux store in a background page of a WebExtension to other
  * extension pages, such as content scripts and popups.
  */
-
+import { createStore } from "redux";
 import type { Store } from "redux";
 
+const randomString = () =>
+  Math.random()
+    .toString(36)
+    .substring(7)
+    .split("")
+    .join(".");
+
+const SYNC_ACTION = `@@redux-webextension/SYNC${randomString()}`;
 const STORE_CLIENT_PREFIX = "storeClient:";
 
 type ReduxMessage = {|
@@ -38,26 +46,14 @@ function connectStore(
   name: string = "default",
   portFactory?: PortFactory<ReduxMessage> = defaultPortFactory
 ): Promise<Store<any, any>> {
-  let currentState, port;
-  let subscribers = new Map();
-  let subscriberCounter = 0;
+  let port;
 
-  function subscribe(listener) {
-    let key = subscriberCounter;
-    subscribers.set(key, listener);
-    subscriberCounter++;
-
-    return () => {
-      subscribers.delete(key);
-    };
-  }
+  let store = createStore((state: any, action) => {
+    return action.type == SYNC_ACTION ? action.state : state;
+  });
 
   function dispatch(action) {
     port.postMessage({ type: "dispatch", payload: action });
-  }
-
-  function getState() {
-    return currentState;
   }
 
   function replaceReducer() {
@@ -65,12 +61,10 @@ function connectStore(
   }
 
   port = portFactory(name);
-
   port.onMessage.addListener(message => {
     switch (message.type) {
       case "stateSync":
-        currentState = message.payload;
-        subscribers.forEach(s => s());
+        store.dispatch({ type: SYNC_ACTION, state: message.payload });
         break;
       default:
         throw new Error(`Unknown message type: ${message.type}`);
@@ -78,11 +72,15 @@ function connectStore(
   });
 
   function executor(resolve, reject) {
-    let unsubscribe = subscribe(() => {
+    let unsubscribe = store.subscribe(() => {
       unsubscribe();
-      resolve({ subscribe, dispatch, getState, replaceReducer });
+      resolve({
+        subscribe: store.subscribe,
+        getState: store.getState,
+        dispatch,
+        replaceReducer
+      });
     });
-
     port.postMessage({ type: "requestStateSync" });
   }
 
