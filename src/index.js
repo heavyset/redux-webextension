@@ -17,7 +17,13 @@ const SYNC_ACTION = `@@redux-webextension/SYNC${randomString()}`;
 const STORE_CLIENT_PREFIX = "storeClient:";
 
 type ReduxMessage = {|
-  type: "dispatch" | "stateSync" | "requestStateSync",
+  id?: string,
+  type:
+    | "dispatch"
+    | "stateSync"
+    | "requestStateSync"
+    | "dispatchResolved"
+    | "dispatchRejected",
   payload?: mixed
 |};
 
@@ -82,6 +88,8 @@ function connectStore(
  *       to once the state has received a first sync. The `dispatch`/
  *       `subscribe`/`getState` functions will fail until this resolve has
  *       happened.
+ *     * `dispatch` always returns a Promise that resolves or rejects depending
+ *       on whether the other end resolved or rejected.
  */
 function connectedStore(
   name: string = "default",
@@ -94,6 +102,7 @@ function connectedStore(
 
     let store = cs(wrappedReducer, undefined);
     let port = portFactory(name);
+    let pendingPromises = {};
 
     let resolved = false;
     let guardResolve = () => {
@@ -104,7 +113,28 @@ function connectedStore(
     };
 
     let dispatch = (action: any) => {
-      guardResolve() && port.postMessage({ type: "dispatch", payload: action });
+      guardResolve();
+
+      let id = randomString();
+
+      return new Promise((resolve, reject) => {
+        pendingPromises[id] = [
+          () => {
+            delete pendingPromises[id];
+            resolve();
+          },
+          () => {
+            delete pendingPromises[id];
+            reject();
+          }
+        ];
+
+        port.postMessage({
+          id,
+          type: "dispatch",
+          payload: action
+        });
+      });
     };
     let getState = () => guardResolve() && store.getState();
     let subscribe = (...args: any) =>
@@ -124,6 +154,16 @@ function connectedStore(
         switch (message.type) {
           case "stateSync":
             store.dispatch({ type: SYNC_ACTION, state: message.payload });
+            break;
+          case "dispatchResolved":
+            if (message.id) {
+              pendingPromises[message.id][0]();
+            }
+            break;
+          case "dispatchRejected":
+            if (message.id) {
+              pendingPromises[message.id][1]();
+            }
             break;
           default:
             throw new Error(`Unknown message type: ${message.type}`);
@@ -211,10 +251,24 @@ function registerPortListeners(
     });
   }
 
+  function respond(id, dispatchResult) {
+    dispatchResult
+      .then(() => {
+        port.postMessage({ type: "dispatchResolved", payload: { id } });
+      })
+      .catch(() => {
+        port.postMessage({ type: "dispatchRejected", payload: { id } });
+      });
+  }
+
   function messageListener(message) {
     switch (message.type) {
       case "dispatch":
-        store.dispatch(message.payload);
+        try {
+          respond(message.id, Promise.resolve(store.dispatch(message.payload)));
+        } catch (err) {
+          respond(message.id, Promise.reject(err));
+        }
         break;
       case "requestStateSync":
         sendStateSync();

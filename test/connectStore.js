@@ -95,10 +95,46 @@ describe("a connected store", () => {
     let dispatchedAction = { type: "reduxAction", a: "b" };
     store.dispatch(dispatchedAction);
 
-    assert.deepStrictEqual(portStub.postMessage.lastArg, {
-      type: "dispatch",
-      payload: dispatchedAction
+    let lastPost = portStub.postMessage.lastArg;
+
+    assert.equal(typeof lastPost.id, "string");
+    assert.equal(lastPost.type, "dispatch");
+    assert.deepStrictEqual(lastPost.payload, dispatchedAction);
+  });
+
+  it("resolves dispatch with a dispatchResolved response", async function() {
+    let dispatchedAction = { type: "reduxAction", a: "b" };
+    let promise = store.dispatch(dispatchedAction);
+
+    let lastPost = portStub.postMessage.lastArg;
+
+    portStub.onMessage.addListener.callback({
+      type: "dispatchResolved",
+      id: lastPost.id
     });
+
+    let resolution = await promise;
+
+    assert.equal(typeof resolution, "undefined");
+  });
+
+  it("rejects dispatch with a dispatchRejected response", async function() {
+    let dispatchedAction = { type: "reduxAction", a: "b" };
+    let promise = store.dispatch(dispatchedAction);
+
+    let lastPost = portStub.postMessage.lastArg;
+
+    portStub.onMessage.addListener.callback({
+      type: "dispatchRejected",
+      id: lastPost.id
+    });
+
+    try {
+      await promise;
+      assert.ok(false, "This should throw before here");
+    } catch (err) {
+      assert.ok(typeof err, "undefined");
+    }
   });
 
   it("fires subscribed event listeners on state syncs", () => {

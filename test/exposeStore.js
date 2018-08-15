@@ -81,6 +81,87 @@ describe("an exposed store", () => {
     assert.deepStrictEqual(storeStub.dispatch.lastArg, { action: "TEST" });
   });
 
+  it("sends dispatchResolved if dispatch returns a resolved Promise", async function() {
+    let id = "abc";
+
+    await new Promise((resolve, reject) => {
+      portStub.postMessage = sinon.fake(message => {
+        resolve();
+      });
+
+      storeStub.dispatch = sinon.fake.resolves(true);
+      exposeStore(storeStub, addListener);
+
+      let testPayload = { action: "TEST" };
+      portStub.onMessage.addListener.callback({
+        id,
+        type: "dispatch",
+        payload: testPayload
+      });
+    });
+
+    assert.deepStrictEqual(portStub.postMessage.lastArg, {
+      type: "dispatchResolved",
+      payload: { id }
+    });
+  });
+
+  it("sends dispatchRejected if dispatch returns a rejected Promise", async function() {
+    let id = "abc";
+    try {
+      await new Promise((resolve, reject) => {
+        portStub.postMessage = sinon.fake(message => {
+          reject();
+        });
+
+        storeStub.dispatch = sinon.fake.rejects();
+        exposeStore(storeStub, addListener);
+
+        let testPayload = { action: "TEST" };
+        portStub.onMessage.addListener.callback({
+          id,
+          type: "dispatch",
+          payload: testPayload
+        });
+      });
+
+      assert.ok(false, "Should never reach here.");
+    } catch (err) {
+      assert.deepStrictEqual(portStub.postMessage.lastArg, {
+        type: "dispatchRejected",
+        payload: { id }
+      });
+    }
+  });
+
+  it("sends dispatchRejected if dispatch throws", async function() {
+    let id = "abc";
+    try {
+      await new Promise((resolve, reject) => {
+        portStub.postMessage = sinon.fake(message => {
+          reject();
+        });
+
+        storeStub.dispatch = sinon.fake.throws("blam!");
+        exposeStore(storeStub, addListener);
+
+        let testPayload = { action: "TEST" };
+        portStub.onMessage.addListener.callback({
+          id,
+          type: "dispatch",
+          payload: testPayload
+        });
+      });
+
+      assert.ok(false, "Should never reach here.");
+    } catch (err) {
+      assert.deepStrictEqual(portStub.postMessage.lastArg, {
+        type: "dispatchRejected",
+        payload: { id }
+      });
+    }
+  });
+
   it("syncs state when requested", () => {
     exposeStore(storeStub, addListener);
 
